@@ -142,3 +142,25 @@ def test_repartition_unknown_divisions():
         ValueError, match="Cannot repartition on divisions with unknown divisions"
     ):
         df.repartition(divisions=(0, 100)).compute()
+
+
+@pytest.mark.parametrize("presorted", [True, False])
+def test_repartition_null_index(presorted):
+    # Null keys in the index must not be dropped when repartitioning.
+    # Dask keeps null-keyed rows in the last partition (na_position="last").
+    pdf = pd.DataFrame(
+        {
+            "x": [1.0, 2.0, np.nan, 3.0, 4.0, np.nan, 5.0, 6.0, 7.0, 8.0],
+            "y": range(10),
+        }
+    )
+    if not presorted:
+        pdf = pdf.sample(frac=1.0, random_state=0).reset_index(drop=True)
+    df = from_pandas(pdf, npartitions=3)
+    expected = pdf.set_index("x")
+
+    result = df.set_index("x").repartition(divisions=[1.0, 3.0, 5.0, 8.0], force=True)
+    assert_eq(result, expected)
+
+    result = df.set_index("x").repartition(npartitions=6)
+    assert_eq(result, expected)

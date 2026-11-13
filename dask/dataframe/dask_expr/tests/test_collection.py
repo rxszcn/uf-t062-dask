@@ -2804,3 +2804,21 @@ def test_align_known_divisions_in_assign():
     df = df.assign(c=df["a"])
     assert_eq(ddf, df)
     assert_eq(ddf.optimize(), df)
+
+
+@pytest.mark.parametrize("presorted", [True, False])
+def test_set_index_nulls_consolidated_in_last_partition(presorted):
+    # Null keys are assigned to the last partition (na_position="last"),
+    # even when the partition min/max make the data look presorted
+    pdf = pd.DataFrame(
+        {"x": [1.0, 2.0, np.nan, 3.0, 4.0, np.nan, 5.0, 6.0], "y": range(8)}
+    )
+    if not presorted:
+        pdf = pdf.sample(frac=1.0, random_state=0).reset_index(drop=True)
+    df = from_pandas(pdf, npartitions=4)
+
+    result = df.set_index("x")
+    parts = [result.partitions[i].compute() for i in range(result.npartitions)]
+    assert not any(p.index.isna().any() for p in parts[:-1])
+    assert parts[-1].index.isna().sum() == 2
+    assert_eq(result, pdf.set_index("x"))

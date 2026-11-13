@@ -4399,6 +4399,25 @@ def test_boundary_slice_empty():
     tm.assert_frame_equal(result, expected)
 
 
+def test_boundary_slice_null_index():
+    # Null keys compare unequal to everything. Dask assigns them to the
+    # last partition, so only the right-most slice (right_boundary=True)
+    # picks them up; other slices must not see them.
+    df = pd.DataFrame({"B": range(5)}, index=[1.0, 2.0, 3.0, np.nan, np.nan])
+
+    result = methods.boundary_slice(df, 1, 2, right_boundary=False)
+    expected = df.iloc[:1]
+    tm.assert_frame_equal(result, expected)
+
+    result = methods.boundary_slice(df, 2, 3)
+    expected = df.iloc[1:]
+    tm.assert_frame_equal(result, expected)
+
+    result = methods.boundary_slice(df, 1, 3, right_boundary=False)
+    expected = df.iloc[:2]
+    tm.assert_frame_equal(result, expected)
+
+
 @pytest.mark.parametrize(
     "start, stop, right_boundary, left_boundary, drop",
     [

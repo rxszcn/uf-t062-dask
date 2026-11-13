@@ -1108,3 +1108,50 @@ def test_merged_partitions_filtered():
     # Check result
     expect = a.compute().merge(b.compute(), left_on=["y"], right_on=["yy"], how="inner")
     assert_eq(result, expect, check_index=False)
+
+
+@pytest.mark.parametrize("how", ["inner", "left", "outer"])
+def test_merge_null_index(how):
+    # Null keys in the index behave like in pandas: they compare equal to
+    # each other in index merges and must not be dropped silently.
+    pdf1 = pd.DataFrame(
+        {"x": [1.0, 2.0, np.nan, 3.0, np.nan, 4.0, 5.0, np.nan], "a": range(8)}
+    )
+    pdf2 = pd.DataFrame({"x": [2.0, np.nan, 3.0, np.nan, 5.0], "b": range(5)})
+    df1 = from_pandas(pdf1, npartitions=3)
+    df2 = from_pandas(pdf2, npartitions=2)
+
+    result = df1.set_index("x").merge(
+        df2.set_index("x"), left_index=True, right_index=True, how=how
+    )
+    expected = pdf1.set_index("x").merge(
+        pdf2.set_index("x"), left_index=True, right_index=True, how=how
+    )
+    assert_eq(result, expected)
+
+
+def test_join_null_index():
+    pdf1 = pd.DataFrame(
+        {"x": [1.0, 2.0, np.nan, 3.0, np.nan, 4.0, 5.0, np.nan], "a": range(8)}
+    )
+    pdf2 = pd.DataFrame({"x": [2.0, np.nan, 3.0, np.nan, 5.0], "b": range(5)})
+    df1 = from_pandas(pdf1, npartitions=3)
+    df2 = from_pandas(pdf2, npartitions=2)
+
+    result = df1.set_index("x").join(df2.set_index("x"), how="inner")
+    expected = pdf1.set_index("x").join(pdf2.set_index("x"), how="inner")
+    assert_eq(result, expected)
+
+
+def test_merge_null_keys_column():
+    # Null keys in a merge column never match, like in pandas
+    pdf1 = pd.DataFrame(
+        {"x": [1.0, 2.0, np.nan, 3.0, np.nan, 4.0, 5.0, np.nan], "a": range(8)}
+    )
+    pdf2 = pd.DataFrame({"x": [2.0, np.nan, 3.0, np.nan, 5.0], "b": range(5)})
+    df1 = from_pandas(pdf1, npartitions=3)
+    df2 = from_pandas(pdf2, npartitions=2)
+
+    result = df1.merge(df2, on="x", how="inner")
+    expected = pdf1.merge(pdf2, on="x", how="inner")
+    assert_eq(result, expected, check_index=False)

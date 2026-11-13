@@ -111,6 +111,14 @@ def boundary_slice(df, start, stop, right_boundary=True, left_boundary=True):
         # on monotonic vs. non-monotonic indexes
         # If the index is monotonic, `df.loc[start:stop]` is fine.
         # If it's not, `df.loc[start:stop]` raises when `start` is missing
+        nulls = None
+        if right_boundary:
+            # Null keys never survive the comparisons below since they
+            # compare unequal to everything. Dask assigns null-keyed rows
+            # to the last partition (``na_position="last"``), so the
+            # right-most slice has to carry them over explicitly, otherwise
+            # repartitioning and indexed merges silently drop those rows.
+            nulls = df[df.index.isna()]
         if start is not None:
             if left_boundary:
                 df = df[df.index >= start]
@@ -121,6 +129,8 @@ def boundary_slice(df, start, stop, right_boundary=True, left_boundary=True):
                 df = df[df.index <= stop]
             else:
                 df = df[df.index < stop]
+        if nulls is not None and len(nulls) > 0:
+            df = pd.concat([df, nulls])
         return df
 
     result = df.loc[start:stop]

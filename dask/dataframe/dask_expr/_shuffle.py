@@ -1354,10 +1354,16 @@ def _calculate_divisions(
         other = new_collection(other).cat.as_ordered()._expr
 
     try:
-        divisions, mins, maxes = compute(
+        divisions, mins, maxes, contains_nulls = compute(
             new_collection(RepartitionQuantiles(other, npartitions, upsample=upsample)),
             new_collection(other).map_partitions(M.min),
             new_collection(other).map_partitions(M.max),
+            # min/max skip nulls, so detect them separately: a column with
+            # nulls interleaved can look "presorted" by its partition
+            # min/max while the null rows are scattered across partitions.
+            # Such data has to go through the shuffle, which consolidates
+            # the null rows into the last partition.
+            new_collection(other).isna().any(),
         )
     except TypeError as e:
         # When there are nulls and a column is non-numeric, a TypeError is sometimes raised as a result of
@@ -1410,7 +1416,7 @@ def _calculate_divisions(
         mins = mins.astype(dtype)
         maxes = maxes.astype(dtype)
 
-    if mins.isna().any() or maxes.isna().any():
+    if contains_nulls or mins.isna().any() or maxes.isna().any():
         presorted = False
     else:
         n = mins.size
